@@ -375,16 +375,16 @@
       const [editingId, setEditingId] = useState(null);
       const [editData, setEditData]   = useState(null);
       const [search, setSearch]       = useState("");
-      const [sortField, setSortField] = useState("listingNum");
+      const [sortField, setSortField] = useState("listingNum"); // "Year" field
       const [sortDir, setSortDir]     = useState("desc");
 
-      const blank = { condition:"U", listingNum:"", bikeModel:"", internalSerial:"", driveFolderId:"", notes:"" };
+      const blank = { condition:"U", listingNum:"", bikeModel:"", internalSerial:"", purchasePrice:"", driveFolderId:"", notes:"" };
       const [f, setF] = useState(blank);
 
-      const buildRow = d => [d.condition||"U", d.listingNum||"", d.bikeModel||"", d.internalSerial||"", d.driveFolderId||"", d.notes||""];
+      const buildRow = d => [d.condition||"U", d.listingNum||"", d.bikeModel||"", d.internalSerial||"", parseFloat(d.purchasePrice)||0, d.driveFolderId||"", d.notes||""];
 
       const handleAdd = async () => {
-        if (!f.listingNum.trim()) { flash("⚠ Listing number is required"); return; }
+        if (!f.listingNum.trim()) { flash("⚠ Year is required"); return; }
         if (!f.bikeModel.trim()) { flash("⚠ Bike model is required"); return; }
         setSaving(true);
         try {
@@ -452,9 +452,10 @@
               <h3 style={{ fontSize:14, fontWeight:700, color:C.text, margin:"0 0 18px" }}>New Bike</h3>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))", gap:14 }}>
                 <div><label style={lbl}>Condition *</label><select value={f.condition} onChange={e=>setF({...f,condition:e.target.value})} style={{...inp}}><option value="U">U — Used</option><option value="N">N — New</option></select></div>
-                <div><label style={lbl}>Listing # *</label><FI value={f.listingNum} onChange={e=>setF({...f,listingNum:e.target.value})} placeholder="e.g. 25" /></div>
+                <div><label style={lbl}>Year *</label><FI value={f.listingNum} onChange={e=>setF({...f,listingNum:e.target.value})} placeholder="e.g. 05" /></div>
                 <div><label style={lbl}>Bike Model *</label><FI value={f.bikeModel} onChange={e=>setF({...f,bikeModel:e.target.value})} placeholder="e.g. YZ450F" /></div>
                 <div><label style={lbl}>Internal Serial</label><FI value={f.internalSerial} onChange={e=>setF({...f,internalSerial:e.target.value})} placeholder="e.g. 17" /></div>
+                <div><label style={lbl}>Purchase Price ($)</label><FI type="number" value={f.purchasePrice} onChange={e=>setF({...f,purchasePrice:e.target.value})} placeholder="e.g. 600" /></div>
                 <div><label style={lbl}>Drive Folder ID</label><FI value={f.driveFolderId} onChange={e=>setF({...f,driveFolderId:e.target.value})} placeholder="Google Drive folder ID" /></div>
                 <div style={{ gridColumn:"1/-1" }}><label style={lbl}>Notes</label><FI value={f.notes} onChange={e=>setF({...f,notes:e.target.value})} placeholder="Optional notes" /></div>
               </div>
@@ -474,7 +475,7 @@
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
               <thead>
                 <tr>
-                  {[["condition","Cond."],["listingNum","Listing #"],["bikeModel","Model"],["internalSerial","Internal Serial"],["driveFolderId","Drive Folder"]].map(([f,l])=>(
+                  {[["condition","Cond."],["listingNum","Year"],["bikeModel","Model"],["internalSerial","Internal Serial"],["purchasePrice","Price"],["driveFolderId","Drive Folder"]].map(([f,l])=>(
                     <th key={f} style={thStyle()} onClick={()=>toggleSort(f)}>{l}{sortIcon(f)}</th>
                   ))}
                   <th style={{...thStyle(),cursor:"default"}}>Notes</th>
@@ -482,7 +483,7 @@
                 </tr>
               </thead>
               <tbody>
-                {filtered.length===0 && <tr><td colSpan={7} style={{ padding:40, textAlign:"center", color:C.text3 }}>No bikes yet.</td></tr>}
+                {filtered.length===0 && <tr><td colSpan={8} style={{ padding:40, textAlign:"center", color:C.text3 }}>No bikes yet.</td></tr>}
                 {filtered.map((bike,i) => {
                   const isEditing = editingId===bike.id;
                   return (
@@ -491,6 +492,7 @@
                       <td style={{ padding:"12px 14px", fontFamily:C.mono, fontWeight:600 }}>{isEditing?<FI value={editData.listingNum} onChange={e=>setEditData({...editData,listingNum:e.target.value})} style={{padding:"4px 8px",fontSize:12,width:80}} />:bike.listingNum}</td>
                       <td style={{ padding:"12px 14px", fontWeight:600 }}>{isEditing?<FI value={editData.bikeModel} onChange={e=>setEditData({...editData,bikeModel:e.target.value})} style={{padding:"4px 8px",fontSize:12,width:120}} />:bike.bikeModel}</td>
                       <td style={{ padding:"12px 14px", color:C.text2 }}>{isEditing?<FI value={editData.internalSerial} onChange={e=>setEditData({...editData,internalSerial:e.target.value})} style={{padding:"4px 8px",fontSize:12,width:80}} />:(bike.internalSerial||"—")}</td>
+                      <td style={{ padding:"12px 14px", fontWeight:600 }}>{isEditing?<FI type="number" value={editData.purchasePrice} onChange={e=>setEditData({...editData,purchasePrice:e.target.value})} style={{padding:"4px 8px",fontSize:12,width:100}} />:bike.purchasePrice?`$${bike.purchasePrice}`:"—"}</td>
                       <td style={{ padding:"12px 14px" }}>{isEditing?<FI value={editData.driveFolderId} onChange={e=>setEditData({...editData,driveFolderId:e.target.value})} style={{padding:"4px 8px",fontSize:11,width:200}} />:bike.driveFolderId?<a href={`https://drive.google.com/drive/folders/${bike.driveFolderId}`} target="_blank" rel="noopener noreferrer" style={{ color:C.accent, fontSize:12, textDecoration:"none", fontWeight:500 }}>{Ic.link} Open</a>:<span style={{ color:C.text3, fontSize:12 }}>Not linked</span>}</td>
                       <td style={{ padding:"12px 14px", color:C.text2 }}>{isEditing?<FI value={editData.notes} onChange={e=>setEditData({...editData,notes:e.target.value})} style={{padding:"4px 8px",fontSize:12}} />:(bike.notes||"—")}</td>
                       <td style={{ padding:"12px 14px" }}>
@@ -961,7 +963,7 @@
                 <label style={lbl}>Select Bike</label>
                 <select value={selectedBike?.id||""} onChange={e=>{ const b=bikes.find(bk=>bk.id===e.target.value); setSelectedBike(b||null); setPhotos([]); setSourceFolderId(""); setSelectedPhotos(new Set()); }} style={{ ...inp }}>
                   <option value="">— choose a bike —</option>
-                  {bikes.map(b=><option key={b.id} value={b.id}>{b.serial}{b.shelfLocation?` (${b.shelfLocation})`:""}</option>)}
+                  {bikes.map(b=><option key={b.id} value={b.id}>{b.condition}{b.listingNum} — {b.bikeModel}{b.internalSerial ? ` · ${b.internalSerial}` : ""}</option>)}
                 </select>
               </div>
               <div>
@@ -1708,7 +1710,7 @@
         // No OWN LOC check for Brekke
         if(unassignedCount>0) { if(!window.confirm(`⚠ ${unassignedCount} photo${unassignedCount!==1?"s":""} still unassigned. Generate SKUs anyway?`)) return; }
 
-        const purchasePrice=0; // COGS deferred for Brekke
+        const purchasePrice=selectedBike.purchasePrice||0;
         const partsToProcess=driveFolders.filter(sf=>sf.partNum);
         const totalRatio=partsToProcess.reduce((sum,sf)=>sum+getRatio(sf.partNum,selectedBike?.serial),0);
 
@@ -1726,7 +1728,7 @@
         const items=ordered.map(sf=>{
           const ratio=getRatio(sf.partNum,selectedBike?.serial);
           const rawCogs = totalRatio>0?(ratio/totalRatio)*purchasePrice:0;
-          const cogs=Math.max(1, Math.round(rawCogs)); // minimum $1 COGS
+          const cogs = ratio>0 ? Math.max(1, Math.round(rawCogs)) : 0;
           const checklistEntry = checklistItems.find(c=>c.partNum===sf.partNum);
           const location = mergedLocs[String(sf.partNum)]||defaultLocation;
           const partNotes = checklistEntry?.notes||"";
@@ -1737,8 +1739,9 @@
           const bikeModel = selectedBike.bikeModel||"";
           const intSerial = selectedBike.internalSerial||"";
           const partCode = String(sf.partNum); // e.g. EX-01
-          const sku=`${conditionCode}${listingN}-${bikeModel}-${intSerial}-${partCode}`.replace(/\s+/g,"-").trim();
-          return {partNum:sf.partNum,partName:sf.cleanName,folderName:sf.name,cogs:0,location:"",sku,driveFolderId:sf.id||"",group:getGroupForPart(sf.partNum),notes:partNotes};
+          const cogsStr = String(cogs).padStart(3,"0");
+          const sku=`${conditionCode}${listingN}-${bikeModel}-${intSerial}-${partCode}-${cogsStr}`.replace(/\s+/g,"-").trim();
+          return {partNum:sf.partNum,partName:sf.cleanName,folderName:sf.name,cogs,location:"",sku,driveFolderId:sf.id||"",group:getGroupForPart(sf.partNum),notes:partNotes};
         });
 
         // Penny reconciliation
@@ -1778,7 +1781,7 @@
         if(!selectedBike||savedSkus.length===0) { flash("⚠ No saved SKUs to refresh"); return; }
         if(!window.confirm(`Recalculate COGS for all ${savedSkus.length} saved SKUs? This will update the Google Sheet.`)) return;
         const purchasePrice=selectedBike.purchasePrice||0;
-        const allParts=getBikeParts?getBikeParts(selectedBike.serial):masterParts;
+        const allParts=getBikeParts?getBikeParts(selectedBike.id):masterParts;
         const totalRatio=savedSkus.reduce((sum,s)=>sum+getRatio(s.partNum,selectedBike.serial),0);
         const updated=savedSkus.map(s=>{
           const ratio=getRatio(s.partNum,selectedBike.serial);
@@ -1787,7 +1790,8 @@
           const listingN=selectedBike.listingNum||"";
           const bikeModel=selectedBike.bikeModel||"";
           const intSerial=selectedBike.internalSerial||"";
-          const newSku=`${conditionCode}${listingN}-${bikeModel}-${intSerial}-${String(s.partNum)}`.replace(/\s+/g,"-").trim();
+          const cogsStr=String(newCogs).padStart(3,"0");
+          const newSku=`${conditionCode}${listingN}-${bikeModel}-${intSerial}-${String(s.partNum)}-${cogsStr}`.replace(/\s+/g,"-").trim();
           // Carry notes from checklist if not already on saved SKU
           const checklistEntry = checklistItems.find(c=>c.partNum===s.partNum);
           const notes = s.notes||(checklistEntry?.notes||"");
@@ -1869,7 +1873,7 @@
                     <label style={lbl}>Bike</label>
                     <select value={selectedBike?.id||""} onChange={e=>{ const b=bikes.find(bk=>bk.id===e.target.value); setSelectedBike(b||null); setGeneratedSkus(null); setPartLocations({}); }} style={{ ...inp }}>
                       <option value="">— select —</option>
-                      {bikes.map(b=><option key={b.id} value={b.id}>{b.serial}</option>)}
+                      {bikes.map(b=><option key={b.id} value={b.id}>{b.condition}{b.listingNum} — {b.bikeModel}{b.internalSerial ? ` · ${b.internalSerial}` : ""}</option>)}
                     </select>
                   </div>
                   {selectedBike&&<>
@@ -2013,15 +2017,17 @@
                               <div style={{ fontSize:11, color:C.text3, marginTop:1 }}>{item.partName}</div>
                             </div>
                             <div style={{ textAlign:"right" }}>
-                              <div style={{ fontSize:11, color:C.text3, fontStyle:"italic" }}>COGS deferred</div>
+                              <div style={{ fontSize:12, fontWeight:600, color:item.cogs>0?C.accent:C.text3 }}>{item.cogs>0?`$${item.cogs}`:"—"}</div>
+                              <div style={{ fontSize:10, color:C.text3 }}>COGS</div>
                             </div>
                           </div>
                         </div>
                       );
                     })}
                   </div>
-                  <div style={{ padding:"8px 16px", background:C.amberL, borderTop:`1px solid ${C.amber}44`, fontSize:11, color:C.amber }}>
-                    ℹ COGS not yet activated — update ratios in parts_master sheet when ready
+                  <div style={{ padding:"10px 16px", background:C.bg, borderTop:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", fontSize:12 }}>
+                    <span style={{ color:C.text2 }}>Total COGS</span>
+                    <span style={{ fontWeight:700, color:C.text }}>{generatedSkus.reduce((s,i)=>s+i.cogs,0)>0?`$${generatedSkus.reduce((s,i)=>s+i.cogs,0).toLocaleString()}`:"—"}</span>
                   </div>
                 </div>
               )}
@@ -2090,6 +2096,10 @@
 
     // ─── SETTINGS PAGE ─────────────────────────────────────────────────────────
     const CHANGELOG = [
+      { date:"2026-05-12", type:"feature", text:"Update 1: Add Part to Checklist (Temporary + Permanent)" },
+      { date:"2026-05-12", type:"feature", text:"Update 2: COGS activated — Purchase Price in Ledger, 3-digit cost in SKU (000 until ratios set)" },
+      { date:"2026-05-12", type:"fix", text:"Bug Fix: Bike now shows in Part Images and SKU Generator dropdowns" },
+      { date:"2026-05-12", type:"fix", text:"Label Fix: Listing # renamed to Year throughout the app" },
       { date:"2026-05-11", type:"feature", text:"Brekke App launched — adapted from PJ Powersports H&R App" },
       { date:"2026-05-11", type:"feature", text:"New SKU format: [Condition][Listing#]-[Model]-[Serial]-[Category]-[PartNum] e.g. U25-YZ450F-17-EX-01" },
       { date:"2026-05-11", type:"feature", text:"119-part Brekke parts list (EX, EN, SS, WL, FR, OS categories)" },
@@ -2296,14 +2306,22 @@
     const CATEGORY_NAMES = {"EX":"Exhaust","EN":"Engine","SS":"Suspension","WL":"Wheels","FR":"Frame","OS":"Outer / External Systems","Other":"Other"};
 
 
-    const PartsChecklistPage = ({ bike, masterParts, flash, onSave, onBack }) => {
-      const [checked, setChecked]       = useState({});   // {partNum: true/false}
-      const [notes, setNotes]           = useState({});   // {partNum: "note text"}
-      // locations removed for Brekke — not required
+    const PartsChecklistPage = ({ bike, masterParts, flash, onSave, onBack, reloadMasterParts }) => {
+      const [checked, setChecked]       = useState({});
+      const [notes, setNotes]           = useState({});
       const [search, setSearch]         = useState("");
       const [saving, setSaving]         = useState(false);
       const [loading, setLoading]       = useState(true);
-      const [sortMode, setSortMode]     = useState("az"); // "group" | "az"
+      const [sortMode, setSortMode]     = useState("group");
+      // Add Part modal state
+      const [showAddPart, setShowAddPart]     = useState(false);
+      const [addPartName, setAddPartName]     = useState("");
+      const [addPartCat, setAddPartCat]       = useState("OS");
+      const [addPartCode, setAddPartCode]     = useState("");
+      const [addPartType, setAddPartType]     = useState("temporary");
+      const [savingPart, setSavingPart]       = useState(false);
+      // Session-only temp parts (for current bike this session)
+      const [sessionTempParts, setSessionTempParts] = useState([]);
 
       // Load existing checklist for this bike on mount
       useEffect(()=>{
@@ -2312,14 +2330,69 @@
         callApi({ action:"checklist_read", bikeSerial: bikeId })
           .then(d => {
             if(d.items && d.items.length > 0) {
-              const c={}, n={}, l={};
+              const c={}, n={};
+              const tempFromSheet=[];
               d.items.forEach(item => {
-                if(item.onBike) { c[item.partNum]=true; n[item.partNum]=item.notes||""; }
+                if(item.onBike) {
+                  c[item.partNum]=true;
+                  n[item.partNum]=item.notes||"";
+                  // If part not in masterParts, it's a temp part — restore it for this bike
+                  const inMaster = (masterParts||[]).find(p=>String(p.num)===String(item.partNum));
+                  if(!inMaster && item.partNum) {
+                    tempFromSheet.push({ num:item.partNum, name:item.partName||item.partNum, category:String(item.partNum).split("-")[0]||"OS", ratio:0 });
+                  }
+                }
               });
               setChecked(c); setNotes(n);
+              if(tempFromSheet.length>0) setSessionTempParts(tempFromSheet);
             }
           }).catch(()=>{}).finally(()=>setLoading(false));
-      },[bike.serial]);
+      },[bike.id]);
+
+      // Auto-compute next part code when category changes
+      const getNextCode = (cat) => {
+        const allParts = [...(masterParts||[]), ...sessionTempParts];
+        const catParts = allParts.filter(p=>String(p.num).startsWith(cat+"-"));
+        const nums = catParts.map(p=>{ const m=String(p.num).match(/(\d+)$/); return m?parseInt(m[1]):0; });
+        const next = nums.length>0 ? Math.max(...nums)+1 : 1;
+        return cat+"-"+String(next).padStart(2,"0");
+      };
+
+      const handleAddPartOpen = (prefill="") => {
+        setAddPartName(prefill);
+        setAddPartCode(getNextCode(addPartCat));
+        setShowAddPart(true);
+      };
+
+      const handleCatChange = (cat) => {
+        setAddPartCat(cat);
+        setAddPartCode(getNextCode(cat));
+      };
+
+      const handleAddPartSave = async () => {
+        if(!addPartName.trim()) { flash("⚠ Part name is required"); return; }
+        if(!addPartCode.trim()) { flash("⚠ Part code is required"); return; }
+        const newPart = { num:addPartCode.trim(), name:addPartName.trim(), category:addPartCat, ratio:0 };
+        setSavingPart(true);
+        try {
+          if(addPartType==="permanent") {
+            // Save to parts_master sheet
+            const allParts = [...(masterParts||[]), newPart];
+            await callApi({ action:"parts_master_write", parts:allParts.map(p=>({num:p.num,name:p.name,category:p.category,ratio:p.ratio||0})) });
+            if(reloadMasterParts) await reloadMasterParts();
+            flash(`✓ "${newPart.name}" added permanently to parts list`);
+          } else {
+            // Temporary — session only
+            setSessionTempParts(prev=>[...prev, newPart]);
+            flash(`✓ "${newPart.name}" added temporarily for this bike`);
+          }
+          // Immediately tick this part as confirmed
+          setChecked(prev=>({...prev,[newPart.num]:true}));
+          setShowAddPart(false);
+          setAddPartName(""); setAddPartCode("");
+        } catch(e) { flash("⚠ Failed to add part: "+e.message); }
+        setSavingPart(false);
+      };
 
       const togglePart = (num) => {
         setChecked(prev => {
@@ -2335,7 +2408,8 @@
       const handleSave = async (goToImages) => {
         setSaving(true);
         try {
-          const items = (masterParts||[]).map(p=>({
+          const allSaveParts = [...(masterParts||[]), ...sessionTempParts.filter(tp=>!(masterParts||[]).find(mp=>String(mp.num)===String(tp.num)))];
+          const items = allSaveParts.map(p=>({
             partNum: p.num,
             partName: p.name,
             onBike: !!checked[p.num],
@@ -2351,8 +2425,11 @@
         setSaving(false);
       };
 
+      // Merge masterParts + sessionTempParts for this bike
+      const allChecklistParts = [...(masterParts||[]), ...sessionTempParts.filter(tp=>!(masterParts||[]).find(mp=>String(mp.num)===String(tp.num)))];
+
       // Filter parts by search
-      const filteredParts = (masterParts||[]).filter(p => {
+      const filteredParts = allChecklistParts.filter(p => {
         if(!search) return true;
         return p.name.toLowerCase().includes(search.toLowerCase()) || String(p.num).includes(search);
       });
@@ -2375,12 +2452,12 @@
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, flexWrap:"wrap", gap:12 }}>
             <div>
               <h1 style={{ fontFamily:C.display, fontSize:22, fontWeight:800, color:C.text, margin:0 }}>Parts Checklist</h1>
-              <p style={{ fontSize:13, color:C.text2, margin:"4px 0 0" }}>{bike.bikeModel||bike.listingNum||bike.id} · Listing #{bike.listingNum} · {bike.condition==="N"?"New":"Used"}</p>
+              <p style={{ fontSize:13, color:C.text2, margin:"4px 0 0" }}>{bike.bikeModel||bike.listingNum||bike.id} · Year {bike.listingNum} · {bike.condition==="N"?"New":"Used"}</p>
             </div>
             <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
               {confirmedCount>0&&<span style={{ fontSize:12, background:C.accentL, color:C.accentD, padding:"3px 10px", borderRadius:20, fontWeight:600 }}>{confirmedCount} confirmed</span>}
               {/* OWN LOC badge removed for Brekke */}
-              <button onClick={()=>{ setChecked(Object.fromEntries((masterParts||[]).map(p=>[p.num,true]))); }} style={{ ...btn, background:C.bg, color:C.text2, border:`1px solid ${C.border}`, padding:"6px 12px", fontSize:12 }}>Select All</button>
+              <button onClick={()=>{ setChecked(Object.fromEntries(allChecklistParts.map(p=>[p.num,true]))); }} style={{ ...btn, background:C.bg, color:C.text2, border:`1px solid ${C.border}`, padding:"6px 12px", fontSize:12 }}>Select All</button>
               <button onClick={()=>{ setChecked({}); setNotes({}); }} style={{ ...btn, background:C.bg, color:C.text2, border:`1px solid ${C.border}`, padding:"6px 12px", fontSize:12 }}>Clear All</button>
               <button onClick={()=>handleSave(false)} disabled={saving} style={{ ...btn, background:C.accent, color:"#fff", padding:"6px 16px", fontSize:13 }}>{saving?Ic.spin:Ic.check} Save</button>
             </div>
@@ -2402,7 +2479,12 @@
 
             {loading?<Spinner />:(
               filteredParts.length===0
-                ? <div style={{ padding:40, textAlign:"center", color:C.text3, fontSize:13 }}>No matching parts</div>
+                ? <div style={{ padding:40, textAlign:"center", color:C.text3, fontSize:13 }}>
+                    No matching parts
+                    {search && <div style={{ marginTop:12 }}>
+                      <button onClick={()=>handleAddPartOpen(search)} style={{ ...btn, background:C.accentL, color:C.accentD, border:`1px solid ${C.accent}33`, fontSize:12 }}>+ Add "{search}" as a part</button>
+                    </div>}
+                  </div>
                 : sortMode==="az"
                   ? <div>{sortedAZ.map(p => {
                       const isOn = !!checked[p.num];
@@ -2423,6 +2505,47 @@
                     ))}</div>
             )}
           </div>
+
+          {/* Add Part button */}
+          <div style={{ marginBottom:12, textAlign:"right" }}>
+            <button onClick={()=>handleAddPartOpen("")} style={{ ...btn, background:C.bg, color:C.text2, border:`1px solid ${C.border}`, fontSize:12 }}>+ Add Part</button>
+          </div>
+
+          {/* Add Part Modal */}
+          {showAddPart && (
+            <div style={{ ...card, padding:24, marginBottom:16, border:`1px solid ${C.accent}44`, animation:"fadeIn 0.15s ease" }}>
+              <h3 style={{ fontSize:14, fontWeight:700, color:C.text, margin:"0 0 16px" }}>Add New Part</h3>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))", gap:12 }}>
+                <div style={{ gridColumn:"1/-1" }}>
+                  <label style={lbl}>Part Name *</label>
+                  <FI value={addPartName} onChange={e=>setAddPartName(e.target.value)} placeholder="e.g. Breather Pipe" autoFocus />
+                </div>
+                <div>
+                  <label style={lbl}>Category</label>
+                  <select value={addPartCat} onChange={e=>handleCatChange(e.target.value)} style={{...inp}}>
+                    {["EX","EN","SS","WL","FR","OS"].map(c=><option key={c} value={c}>{c} — {{"EX":"Exhaust","EN":"Engine","SS":"Suspension","WL":"Wheels","FR":"Frame","OS":"Outer Systems"}[c]}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={lbl}>Part Code *</label>
+                  <FI value={addPartCode} onChange={e=>setAddPartCode(e.target.value)} placeholder="e.g. OS-65" />
+                </div>
+                <div>
+                  <label style={lbl}>Save As</label>
+                  <select value={addPartType} onChange={e=>setAddPartType(e.target.value)} style={{...inp}}>
+                    <option value="temporary">Temporary (this bike only)</option>
+                    <option value="permanent">Permanent (all future bikes)</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ display:"flex", gap:10, marginTop:16 }}>
+                <button onClick={handleAddPartSave} disabled={savingPart} style={{ ...btn, background:C.accent, color:"#fff" }}>{savingPart?Ic.spin:Ic.check} {savingPart?"Saving…":"Add Part"}</button>
+                <button onClick={()=>{ setShowAddPart(false); setAddPartName(""); }} style={{ ...btn, background:C.bg, color:C.text2, border:`1px solid ${C.border}` }}>Cancel</button>
+              </div>
+              {addPartType==="temporary" && <p style={{ fontSize:11, color:C.text3, margin:"10px 0 0" }}>This part will only appear for this bike. It will be saved to this bike's checklist when you save.</p>}
+              {addPartType==="permanent" && <p style={{ fontSize:11, color:C.accentD, margin:"10px 0 0" }}>This part will be added to the master parts list and appear on all future bike checklists.</p>}
+            </div>
+          )}
 
           {/* Bottom action bar */}
           <div style={{ ...card, padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:10, marginBottom:40 }}>
@@ -2518,7 +2641,7 @@
         // Load ledger
         callApi({action:"ledger_read"}).then(d=>{
           const rows=d.values||[];
-          const loaded=rows.map((r,i)=>{ if(!r[0]&&!r[1]) return null; const cond=String(r[0]||"U").trim(); const lNum=String(r[1]||"").trim(); const mdl=String(r[2]||"").trim(); const iSer=String(r[3]||"").trim(); return { _rowIndex:i+2, id:cond+lNum+"-"+mdl, condition:cond, listingNum:lNum, bikeModel:mdl, internalSerial:iSer, driveFolderId:String(r[4]||"").trim(), notes:String(r[5]||"").trim() }; }).filter(Boolean);
+          const loaded=rows.map((r,i)=>{ if(!r[0]&&!r[1]) return null; const cond=String(r[0]||"U").trim(); const lNum=String(r[1]||"").trim(); const mdl=String(r[2]||"").trim(); const iSer=String(r[3]||"").trim(); return { _rowIndex:i+2, id:cond+lNum+"-"+mdl, condition:cond, listingNum:lNum, bikeModel:mdl, internalSerial:iSer, purchasePrice:parseFloat(r[4])||0, driveFolderId:String(r[5]||"").trim(), notes:String(r[6]||"").trim() }; }).filter(Boolean);
           if(loaded.length) setBikes(loaded);
         }).catch(()=>{});
         // Load master parts
