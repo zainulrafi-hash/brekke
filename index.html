@@ -638,7 +638,7 @@
         // Load confirmed checklist parts for this bike (for modal filtering)
         const bikeImgKey=(selectedBike.condition||"U")+(selectedBike.listingNum||"")+"-"+(selectedBike.bikeModel||"");
         callApi({action:"checklist_read", bikeSerial:bikeImgKey}).then(d=>{
-          const confirmed = (d.items||[]).filter(i=>i.onBike).map(i=>String(i.partNum));
+          const confirmed = (d.items||[]).filter(i=>i.onBike===true||String(i.onBike).toUpperCase()==="TRUE").map(i=>String(i.partNum));
           setChecklistConfirmed(confirmed);
         }).catch(()=>{ setChecklistConfirmed([]); });
         try {
@@ -2321,7 +2321,7 @@
         {isOn&&(
           <div style={{ padding:"8px 16px 12px 52px", background:"#f8fdf8", borderTop:`1px solid ${C.border}` }} onClick={e=>e.stopPropagation()}>
             <label style={{ ...lbl, fontSize:10 }}>Notes for {p.name}</label>
-            <FI value={notes[p.num]||""} onChange={e=>setNotes(prev=>({...prev,[p.num]:e.target.value}))} placeholder="Condition, damage, missing parts…" style={{ fontSize:12, padding:"5px 10px" }} />
+            <FI value={notes[String(p.num)]||""} onChange={e=>setNotes(prev=>({...prev,[String(p.num)]:e.target.value}))} placeholder="Condition, damage, missing parts…" style={{ fontSize:12, padding:"5px 10px" }} />
           </div>
         )}
       </div>
@@ -2360,13 +2360,15 @@
               const c={}, n={};
               const tempFromSheet=[];
               d.items.forEach(item => {
-                if(item.onBike) {
-                  c[item.partNum]=true;
-                  n[item.partNum]=item.notes||"";
+                // Handle both boolean true and string "TRUE" from Google Sheets
+                const isOnBike = item.onBike === true || String(item.onBike).toUpperCase() === "TRUE";
+                if(isOnBike) {
+                  c[String(item.partNum)]=true;
+                  n[String(item.partNum)]=item.notes||"";
                   // If part not in masterParts, it's a temp part — restore it for this bike
                   const inMaster = (masterParts||[]).find(p=>String(p.num)===String(item.partNum));
                   if(!inMaster && item.partNum) {
-                    tempFromSheet.push({ num:item.partNum, name:item.partName||item.partNum, category:String(item.partNum).split("-")[0]||"OS", ratio:0 });
+                    tempFromSheet.push({ num:String(item.partNum), name:item.partName||String(item.partNum), category:String(item.partNum).split("-")[0]||"OS", ratio:0 });
                   }
                 }
               });
@@ -2422,10 +2424,11 @@
       };
 
       const togglePart = (num) => {
+        const key = String(num);
         setChecked(prev => {
-          const on = !prev[num];
-          if(!on) { setNotes(n=>({...n,[num]:""})); }
-          return {...prev,[num]:on};
+          const on = !prev[key];
+          if(!on) { setNotes(n=>({...n,[key]:""})); }
+          return {...prev,[key]:on};
         });
       };
 
@@ -2514,7 +2517,7 @@
                   </div>
                 : sortMode==="az"
                   ? <div>{sortedAZ.map(p => {
-                      const isOn = !!checked[p.num];
+                      const isOn = !!checked[String(p.num)];
                       const isExc = EXCEPTION_PARTS.has(p.num);
                       return <PartRow key={p.num} p={p} isOn={isOn} isExc={isExc} togglePart={togglePart} notes={notes} setNotes={setNotes} />;
                     })}</div>
@@ -2524,7 +2527,7 @@
                           {CATEGORY_NAMES[cat]||cat} <span style={{ fontWeight:400, color:C.text3 }}>({cat}) · {grouped[cat].length} parts</span>
                         </div>
                         {grouped[cat].map(p => {
-                          const isOn = !!checked[p.num];
+                          const isOn = !!checked[String(p.num)];
                           const isExc = EXCEPTION_PARTS.has(p.num);
                           return <PartRow key={p.num} p={p} isOn={isOn} isExc={isExc} togglePart={togglePart} notes={notes} setNotes={setNotes} />;
                         })}
@@ -2711,6 +2714,7 @@
                   flash={flash}
                   onSave={handleChecklistSave}
                   onBack={()=>setChecklistBike(null)}
+                  reloadMasterParts={loadMasterParts}
                 />
               ):(
                 <>
