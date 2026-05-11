@@ -583,6 +583,7 @@
       const [folderSearch, setFolderSearch]     = useState("");
       const [modalPartNum, setModalPartNum]     = useState(null);
       const [modalLocation, setModalLocation]   = useState("");
+      const [checklistConfirmed, setChecklistConfirmed] = useState([]); // confirmed part codes for this bike
       const [lightboxPhotos, setLightboxPhotos] = useState(null);
       const [lightboxIdx, setLightboxIdx]       = useState(0);
       // Drag select
@@ -634,13 +635,12 @@
         if (!selectedBike?.driveFolderId) return;
         setLoadingFolder(true);
         setSubfolders([]); setPhotos([]); setViewingFolder(null); setHasChanges(false); setSelectedPhotos(new Set()); setSourceFolderId(""); setEditingNoteId(null);
-        // Load checklist locations for this bike so OWN LOC parts auto-fill
+        // Load confirmed checklist parts for this bike (for modal filtering)
         const bikeImgKey=(selectedBike.condition||"U")+(selectedBike.listingNum||"")+"-"+(selectedBike.bikeModel||"");
         callApi({action:"checklist_read", bikeSerial:bikeImgKey}).then(d=>{
-          const locs={};
-          (d.items||[]).forEach(item=>{ if(item.location) locs[String(item.partNum)]=item.location; });
-          try { localStorage.setItem(`hr_checklist_locs_${selectedBike.serial}`, JSON.stringify(locs)); } catch(e){}
-        }).catch(()=>{});
+          const confirmed = (d.items||[]).filter(i=>i.onBike).map(i=>String(i.partNum));
+          setChecklistConfirmed(confirmed);
+        }).catch(()=>{ setChecklistConfirmed([]); });
         try {
           const saved = localStorage.getItem(storageKey(selectedBike.id));
           const savedSort = localStorage.getItem(sortKey(selectedBike.id));
@@ -794,10 +794,9 @@
         }
       };
       const confirmAddPart = (partNum, location, customName) => {
-        const allParts = getBikeParts ? getBikeParts(selectedBike?.serial||'') : masterParts;
-        const part = allParts.find(p=>p.num===partNum) || (customName ? {name:customName} : null); if(!part) return;
-        const paddedNum=String(partNum).padStart(2,"0");
-        const folderName=`${paddedNum} - ${part.name}`;
+        const allParts = getBikeParts ? getBikeParts(selectedBike?.id||'') : masterParts;
+        const part = allParts.find(p=>String(p.num)===String(partNum)) || (customName ? {name:customName} : null); if(!part) return;
+        const folderName=`${String(partNum)} - ${part.name}`;
         if(subfolders.some(sf=>sf.name===folderName||sf.name===part.name)) { flash(`⚠ ${part.name} folder already exists`); return; }
         const tempId="new-"+Date.now()+"-"+partNum;
         const photoIds=Array.from(selectedPhotos);
@@ -808,9 +807,17 @@
         setHasChanges(true); setShowPartModal(false); setModalPartNum(null); setPartSearch("");
       };
 
-      // Parts for Part Images modal: master + bike temp parts
-      const allPartsForModal = getBikeParts && selectedBike ? getBikeParts(selectedBike.serial) : masterParts;
-      const filteredParts = allPartsForModal.filter(p=>{ if(!partSearch) return true; const q=partSearch.toLowerCase(); return p.name.toLowerCase().includes(q)||String(p.num).includes(q); }).sort((a,b)=>a.num-b.num);
+      // Parts for Part Images modal: only confirmed checklist parts (fallback to all if checklist empty)
+      const allPartsForModal = getBikeParts && selectedBike ? getBikeParts(selectedBike.id) : masterParts;
+      const modalBaseParts = checklistConfirmed.length > 0
+        ? allPartsForModal.filter(p => checklistConfirmed.includes(String(p.num)))
+        : allPartsForModal;
+      // Exclude parts that already have a folder
+      const existingFolderCodes = new Set(subfolders.map(sf => String(sf.partNum)).filter(Boolean));
+      const filteredParts = modalBaseParts
+        .filter(p => !existingFolderCodes.has(String(p.num)))
+        .filter(p=>{ if(!partSearch) return true; const q=partSearch.toLowerCase(); return p.name.toLowerCase().includes(q)||String(p.num).includes(q); })
+        .sort((a,b)=>String(a.num).localeCompare(String(b.num)));
 
       // ── Assign photos ─────────────────────────────────────────────────────
       const assignPhotosToFolder = (folder) => {
@@ -1621,8 +1628,21 @@
       // Groups for grouping (loaded from sheet via PartGroupsPage pattern)
       const [groups, setGroups]                 = useState(null);
 
-      const getPartNumFromFolderName = (name) => { const m=String(name).match(/^(\d+)\s*[-–]/); return m?parseInt(m[1]):null; };
-      const getCleanName = (name) => String(name).replace(/^\d+\s*[-–]\s*/,"").trim();
+      const getPartNumFromFolderName = (name) => {
+        const s = String(name);
+        // Brekke format: "EX-01 - Name" or "EX-01 Name"
+        const m = s.match(/^([A-Z]{2}-\d+)\s*[-–]?\s*/);
+        if(m) return m[1];
+        // Legacy numeric: "03 - Name"
+        const m2 = s.match(/^(\d+)\s*[-–]/);
+        if(m2) return m2[1];
+        return null;
+      };
+      const getCleanName = (name) => {
+        const s = String(name);
+        // Remove "EX-01 - " prefix
+        return s.replace(/^[A-Z]{2}-\d+\s*[-–]\s*/,"").replace(/^\d+\s*[-–]\s*/,"").trim();
+      };
 
       useEffect(()=>{
         // Load groups from sheet
@@ -1674,15 +1694,17 @@
       // Get part ratio — from passed masterParts (includes temp parts for bike)
       const getRatio = (partNum, bikeSerial) => {
         const allParts = getBikeParts && bikeSerial ? getBikeParts(bikeSerial) : masterParts;
-        const mp = allParts.find(p=>p.num===partNum);
-        return mp?.ratio || 0.001;
+        const mp = allParts.find(p=>String(p.num)===String(partNum));
+        return mp?.ratio || 0;
       };
 
       // Get group for a part number
       const getGroupForPart = (partNum) => {
-        if(!groups) return "Other";
-        for(const [gName,parts] of Object.entries(groups)) { if(parts.find(p=>p.num===partNum)) return gName; }
-        return "Other";
+        // For Brekke, group = category from part code prefix (EX, EN, SS, WL, FR, OS)
+        const s = String(partNum||"");
+        const prefix = s.split("-")[0];
+        const catNames = {"EX":"Exhaust","EN":"Engine","SS":"Suspension","WL":"Wheels","FR":"Frame","OS":"Outer Systems"};
+        return catNames[prefix] || "Other";
       };
 
       const getOrderedFolders = () => {
@@ -2096,6 +2118,7 @@
 
     // ─── SETTINGS PAGE ─────────────────────────────────────────────────────────
     const CHANGELOG = [
+      { date:"2026-05-12", type:"fix", text:"Bug Fix 2/3/4/5: Checklist reload, Part Images modal filter, SKU folder parser, Purchase Price" },
       { date:"2026-05-12", type:"feature", text:"Update 1: Add Part to Checklist (Temporary + Permanent)" },
       { date:"2026-05-12", type:"feature", text:"Update 2: COGS activated — Purchase Price in Ledger, 3-digit cost in SKU (000 until ratios set)" },
       { date:"2026-05-12", type:"fix", text:"Bug Fix: Bike now shows in Part Images and SKU Generator dropdowns" },
@@ -2641,7 +2664,20 @@
         // Load ledger
         callApi({action:"ledger_read"}).then(d=>{
           const rows=d.values||[];
-          const loaded=rows.map((r,i)=>{ if(!r[0]&&!r[1]) return null; const cond=String(r[0]||"U").trim(); const lNum=String(r[1]||"").trim(); const mdl=String(r[2]||"").trim(); const iSer=String(r[3]||"").trim(); return { _rowIndex:i+2, id:cond+lNum+"-"+mdl, condition:cond, listingNum:lNum, bikeModel:mdl, internalSerial:iSer, purchasePrice:parseFloat(r[4])||0, driveFolderId:String(r[5]||"").trim(), notes:String(r[6]||"").trim() }; }).filter(Boolean);
+          const loaded=rows.map((r,i)=>{
+            if(!r[0]&&!r[1]) return null;
+            const cond=String(r[0]||"U").trim();
+            const lNum=String(r[1]||"").trim();
+            const mdl=String(r[2]||"").trim();
+            const iSer=String(r[3]||"").trim();
+            // Detect old 6-col rows: if col4 looks like a Drive ID (long string), treat as old format
+            const col4=String(r[4]||"").trim();
+            const isOldFormat = col4.length>20 && isNaN(parseFloat(col4));
+            const purchasePrice = isOldFormat ? 0 : parseFloat(r[4])||0;
+            const driveFolderId = isOldFormat ? col4 : String(r[5]||"").trim();
+            const notes = isOldFormat ? String(r[5]||"").trim() : String(r[6]||"").trim();
+            return { _rowIndex:i+2, id:cond+lNum+"-"+mdl, condition:cond, listingNum:lNum, bikeModel:mdl, internalSerial:iSer, purchasePrice, driveFolderId, notes };
+          }).filter(Boolean);
           if(loaded.length) setBikes(loaded);
         }).catch(()=>{});
         // Load master parts
