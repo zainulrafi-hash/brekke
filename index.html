@@ -775,12 +775,12 @@
       const selectPartInModal = (partNum) => {
         if(EXCEPTION_PARTS.has(partNum)) {
           // Check if location already in checklist
-          const allPartsForBike = getBikeParts && selectedBike ? getBikeParts(selectedBike.serial) : masterParts;
+          const allPartsForBike = getBikeParts && selectedBike ? getBikeParts(selectedBike.id) : masterParts;
           // Look for location in temp/checklist data via localStorage
-          const tempKey = `hr_temp_parts_${selectedBike?.serial||''}`;
+          const tempKey = `hr_temp_parts_${selectedBike?.id||''}`;
           let checklistLoc = "";
           try {
-            const stored = localStorage.getItem(`hr_checklist_locs_${selectedBike?.serial||''}`);
+            const stored = localStorage.getItem(`hr_checklist_locs_${selectedBike?.id||''}`)
             if(stored) { const locs = JSON.parse(stored); checklistLoc = locs[String(partNum)]||""; }
           } catch(e) {}
           if(checklistLoc) {
@@ -958,7 +958,7 @@
             </div>
             {selectedBike&&onChecklist&&(
               <button onClick={()=>onChecklist(selectedBike)} style={{ ...btn, background:C.accentL, color:C.accentD, border:`1px solid ${C.accent}33`, fontSize:12 }}>
-                ☑ Edit Checklist for {selectedBike.serial}
+                ☑ Edit Checklist for {selectedBike.bikeModel}
               </button>
             )}
           </div>
@@ -1254,8 +1254,8 @@
                         } catch(e) { flash("⚠ Could not save to sheet: "+e.message); }
                       } else {
                         // Save to localStorage for this bike
-                        if(addTempPart && selectedBike) addTempPart(selectedBike.serial, newPart);
-                        flash(`✓ ${newPart.name} added temporarily for ${selectedBike?.serial||"this bike"}`);
+                        if(addTempPart && selectedBike) addTempPart(selectedBike.id, newPart);
+                        flash(`✓ ${newPart.name} added temporarily for ${selectedBike?.id||"this bike"}`);
                       }
                       setSavingNewPart(false);
                       setShowNewPartModal(false);
@@ -1287,7 +1287,7 @@
                   <div style={{ padding:24 }}>
                     <div style={{ fontSize:14, fontWeight:700, color:C.text, marginBottom:4 }}>Storage Location</div>
                     <div style={{ fontSize:12, color:C.text2, marginBottom:16 }}>
-                      <span style={{ fontWeight:600 }}>{(getBikeParts&&selectedBike?getBikeParts(selectedBike.serial):masterParts).find(p=>p.num===modalPartNum)?.name||""}</span>
+                      <span style={{ fontWeight:600 }}>{(getBikeParts&&selectedBike?getBikeParts(selectedBike.id):masterParts).find(p=>p.num===modalPartNum)?.name||""}</span>
                       {" "}has its own location. Enter it below or skip to use the default shelf location.
                     </div>
                     <label style={lbl}>Storage Location <span style={{ color:C.text3, fontWeight:400, textTransform:"none", letterSpacing:0 }}>(optional)</span></label>
@@ -1734,7 +1734,7 @@
 
         const purchasePrice=selectedBike.purchasePrice||0;
         const partsToProcess=driveFolders.filter(sf=>sf.partNum);
-        const totalRatio=partsToProcess.reduce((sum,sf)=>sum+getRatio(sf.partNum,selectedBike?.serial),0);
+        const totalRatio=partsToProcess.reduce((sum,sf)=>sum+getRatio(sf.partNum,selectedBike?.id),0);
 
         let ordered=getOrderedFolders().filter(sf=>sf.partNum);
         if(genSortMode==="group") {
@@ -1748,11 +1748,11 @@
         }
 
         const items=ordered.map(sf=>{
-          const ratio=getRatio(sf.partNum,selectedBike?.serial);
+          const ratio=getRatio(sf.partNum,selectedBike?.id);
           const rawCogs = totalRatio>0?(ratio/totalRatio)*purchasePrice:0;
           const cogs = ratio>0 ? Math.max(1, Math.round(rawCogs)) : 0;
-          const checklistEntry = checklistItems.find(c=>c.partNum===sf.partNum);
-          const location = mergedLocs[String(sf.partNum)]||defaultLocation;
+          const checklistEntry = checklistItems.find(c=>String(c.partNum)===String(sf.partNum));
+          const location = mergedLocs[String(sf.partNum)]||"";
           const partNotes = checklistEntry?.notes||"";
           // Brekke SKU format: [condition][listingNum]-[bikeModel]-[internalSerial]-[categoryCode]-[partNum]
           // COGS deferred — not included in SKU yet
@@ -1766,13 +1766,17 @@
           return {partNum:sf.partNum,partName:sf.cleanName,folderName:sf.name,cogs,location:"",sku,driveFolderId:sf.id||"",group:getGroupForPart(sf.partNum),notes:partNotes};
         });
 
-        // Penny reconciliation
-        const totalCogs=items.reduce((s,i)=>s+i.cogs,0);
-        const diff=purchasePrice-totalCogs;
-        if(diff!==0&&items.length>0) {
-          const sorted=[...items].sort((a,b)=>getRatio(b.partNum)-getRatio(a.partNum));
-          sorted[0].cogs+=Math.round(diff);
-          sorted[0].sku=`B${serialDigits}-${String(sorted[0].partNum).padStart(2,"00")}-${sorted[0].cogs} ${sorted[0].location}`.trim();
+        // Penny reconciliation (only when purchasePrice > 0)
+        if(purchasePrice>0) {
+          const totalCogs=items.reduce((s,i)=>s+i.cogs,0);
+          const diff=purchasePrice-totalCogs;
+          if(diff!==0&&items.length>0) {
+            const sorted=[...items].sort((a,b)=>getRatio(b.partNum)-getRatio(a.partNum));
+            sorted[0].cogs+=Math.round(diff);
+            const condC=(selectedBike.condition||"U").toUpperCase();
+            const cogsStr=String(sorted[0].cogs).padStart(3,"0");
+            sorted[0].sku=`${condC}${selectedBike.listingNum||""}-${selectedBike.bikeModel||""}-${selectedBike.internalSerial||""}-${String(sorted[0].partNum)}-${cogsStr}`.replace(/\s+/g,"-").trim();
+          }
         }
         setGeneratedSkus(items);
         flash(`✓ Generated ${items.length} SKU${items.length!==1?"s":""}`);
@@ -1788,10 +1792,10 @@
           if(res.success) {
             // Re-read SKUs to get real row indices
             const skuData = await callApi({action:"sku_read"});
-            const fresh = (skuData.items||[]).filter(i=>i.bikeSerial===selectedBike.serial);
+            const fresh = (skuData.items||[]).filter(i=>i.bikeSerial===((selectedBike.condition||'U')+(selectedBike.listingNum||'')+'-'+(selectedBike.bikeModel||'')));
             setSavedSkus(fresh);
             // Mark SKU Created in checklist
-            await callApi({action:"checklist_mark_sku", bikeSerial:selectedBike.serial, partNums:items.map(i=>i.partNum)}).catch(()=>{});
+            await callApi({action:"checklist_mark_sku", bikeSerial:(selectedBike.condition||'U')+(selectedBike.listingNum||'')+'-'+(selectedBike.bikeModel||''), partNums:items.map(i=>i.partNum)}).catch(()=>{});
             setGeneratedSkus(null); setPartLocations({});
             flash(`✓ ${items.length} SKUs saved (${res.updated||0} updated, ${res.added||0} new)`);
           } else flash("⚠ Save failed: "+(res.error||""));
@@ -1804,9 +1808,9 @@
         if(!window.confirm(`Recalculate COGS for all ${savedSkus.length} saved SKUs? This will update the Google Sheet.`)) return;
         const purchasePrice=selectedBike.purchasePrice||0;
         const allParts=getBikeParts?getBikeParts(selectedBike.id):masterParts;
-        const totalRatio=savedSkus.reduce((sum,s)=>sum+getRatio(s.partNum,selectedBike.serial),0);
+        const totalRatio=savedSkus.reduce((sum,s)=>sum+getRatio(s.partNum,selectedBike.id),0);
         const updated=savedSkus.map(s=>{
-          const ratio=getRatio(s.partNum,selectedBike.serial);
+          const ratio=getRatio(s.partNum,selectedBike.id);
           const newCogs=Math.max(1,Math.round(totalRatio>0?(ratio/totalRatio)*purchasePrice:1));
           const conditionCode=(selectedBike.condition||"U").toUpperCase();
           const listingN=selectedBike.listingNum||"";
@@ -1868,7 +1872,7 @@
 
       const orderedFolders = getOrderedFolders();
       const filteredSaved = savedSkus.filter(s=>{ if(!skuSearch) return true; const q=skuSearch.toLowerCase(); return s.sku.toLowerCase().includes(q)||s.partName.toLowerCase().includes(q); });
-      const activeParts = getBikeParts && selectedBike ? getBikeParts(selectedBike.serial) : masterParts;
+      const activeParts = getBikeParts && selectedBike ? getBikeParts(selectedBike.id) : masterParts;
       const filteredMasterSearch = activeParts.filter(p=>{ if(!partMasterSearch) return true; const q=partMasterSearch.toLowerCase(); return p.name.toLowerCase().includes(q)||String(p.num).includes(q); });
 
       return (
