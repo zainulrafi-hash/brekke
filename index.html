@@ -2267,7 +2267,7 @@
 
 
     // ─── PART ROW (shared by checklist sort modes) ─────────────────────────────
-    const PartRow = ({ p, isOn, isExc, togglePart, locations, setLocations, notes, setNotes }) => (
+    const PartRow = ({ p, isOn, isExc, togglePart, notes, setNotes }) => (
       <div style={{ borderBottom:`1px solid ${C.border}` }}>
         <div onClick={()=>togglePart(p.num)}
           style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px", cursor:"pointer", background:isOn?C.accentL+"44":"transparent", transition:"background 0.1s" }}
@@ -2407,7 +2407,7 @@
                   ? <div>{sortedAZ.map(p => {
                       const isOn = !!checked[p.num];
                       const isExc = EXCEPTION_PARTS.has(p.num);
-                      return <PartRow key={p.num} p={p} isOn={isOn} isExc={isExc} togglePart={togglePart} locations={locations} setLocations={setLocations} notes={notes} setNotes={setNotes} />;
+                      return <PartRow key={p.num} p={p} isOn={isOn} isExc={isExc} togglePart={togglePart} notes={notes} setNotes={setNotes} />;
                     })}</div>
                   : <div>{sortedCats.map(cat=>(
                       <div key={cat}>
@@ -2417,7 +2417,7 @@
                         {grouped[cat].map(p => {
                           const isOn = !!checked[p.num];
                           const isExc = EXCEPTION_PARTS.has(p.num);
-                          return <PartRow key={p.num} p={p} isOn={isOn} isExc={isExc} togglePart={togglePart} locations={locations} setLocations={setLocations} notes={notes} setNotes={setNotes} />;
+                          return <PartRow key={p.num} p={p} isOn={isOn} isExc={isExc} togglePart={togglePart} notes={notes} setNotes={setNotes} />;
                         })}
                       </div>
                     ))}</div>
