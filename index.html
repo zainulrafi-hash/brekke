@@ -807,16 +807,10 @@
         setHasChanges(true); setShowPartModal(false); setModalPartNum(null); setPartSearch("");
       };
 
-      // Parts for Part Images modal: only confirmed checklist parts (fallback to all if checklist empty)
+      // Parts for Part Images modal: ALL parts, sorted by code, checklist confirmed highlighted
       const allPartsForModal = getBikeParts && selectedBike ? getBikeParts(selectedBike.id) : masterParts;
-      const modalBaseParts = checklistConfirmed.length > 0
-        ? allPartsForModal.filter(p => checklistConfirmed.includes(String(p.num)))
-        : allPartsForModal;
-      // Exclude parts that already have a folder
-      const existingFolderCodes = new Set(subfolders.map(sf => String(sf.partNum)).filter(Boolean));
-      const filteredParts = modalBaseParts
-        .filter(p => !existingFolderCodes.has(String(p.num)))
-        .filter(p=>{ if(!partSearch) return true; const q=partSearch.toLowerCase(); return p.name.toLowerCase().includes(q)||String(p.num).includes(q); })
+      const filteredParts = allPartsForModal
+        .filter(p=>{ if(!partSearch) return true; const q=partSearch.toLowerCase(); return p.name.toLowerCase().includes(q)||String(p.num).toLowerCase().includes(q); })
         .sort((a,b)=>String(a.num).localeCompare(String(b.num)));
 
       // ── Assign photos ─────────────────────────────────────────────────────
@@ -1321,16 +1315,16 @@
                         </div>
                       )}
                       {filteredParts.map((p)=>{
-                        const isExc=EXCEPTION_PARTS.has(p.num);
+                        const isConfirmed = checklistConfirmed.includes(String(p.num));
                         return (
                           <button key={p.num} onClick={()=>selectPartInModal(p.num)}
-                            style={{ width:"100%", display:"flex", alignItems:"center", gap:14, padding:"11px 20px", background:"none", border:"none", borderBottom:`1px solid ${C.border}`, cursor:"pointer", fontFamily:"inherit", textAlign:"left", transition:"background 0.1s" }}
-                            onMouseEnter={e=>e.currentTarget.style.background=C.bg}
-                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                            <span style={{ fontFamily:C.mono, fontSize:11, color:p.isTemp?C.orange:C.text3, minWidth:28, textAlign:"right" }}>{String(p.num).padStart(2,"0")}</span>
-                            <span style={{ fontSize:13, color:C.text, fontWeight:500, flex:1 }}>{p.name}</span>
+                            style={{ width:"100%", display:"flex", alignItems:"center", gap:14, padding:"11px 20px", background:isConfirmed?"#f0fdf4":"none", border:"none", borderBottom:`1px solid ${C.border}`, cursor:"pointer", fontFamily:"inherit", textAlign:"left", transition:"background 0.1s", borderLeft:isConfirmed?`3px solid ${C.accent}`:"3px solid transparent" }}
+                            onMouseEnter={e=>e.currentTarget.style.background=isConfirmed?"#dcfce7":C.bg}
+                            onMouseLeave={e=>e.currentTarget.style.background=isConfirmed?"#f0fdf4":"transparent"}>
+                            <span style={{ fontFamily:C.mono, fontSize:11, color:p.isTemp?C.orange:C.text3, minWidth:44 }}>{String(p.num)}</span>
+                            <span style={{ fontSize:13, color:C.text, fontWeight:isConfirmed?600:500, flex:1 }}>{p.name}</span>
+                            {isConfirmed&&<span style={{ fontSize:10, background:"#dcfce7", color:"#16a34a", padding:"1px 6px", borderRadius:3, fontWeight:700 }}>✓ On Bike</span>}
                             {p.isTemp&&<span style={{ fontSize:10, background:C.orangeL, color:C.orange, padding:"1px 6px", borderRadius:3, fontWeight:600 }}>TEMP</span>}
-                            {/* OWN LOC removed for Brekke */}
                           </button>
                         );
                       })}
@@ -1707,18 +1701,20 @@
         return catNames[prefix] || "Other";
       };
 
+      const CAT_ORDER = ["EX","EN","SS","WL","FR","OS"];
+      const sortByCode = (a, b) => {
+        const cA=String(a.partNum||"ZZ-99"), cB=String(b.partNum||"ZZ-99");
+        const pA=cA.split("-")[0], pB=cB.split("-")[0];
+        const nA=parseInt(cA.split("-")[1])||0, nB=parseInt(cB.split("-")[1])||0;
+        const iA=CAT_ORDER.indexOf(pA)>=0?CAT_ORDER.indexOf(pA):99;
+        const iB=CAT_ORDER.indexOf(pB)>=0?CAT_ORDER.indexOf(pB):99;
+        if(iA!==iB) return iA-iB;
+        return nA-nB;
+      };
       const getOrderedFolders = () => {
         const ordered = folderOrder.map(i=>driveFolders[i]).filter(Boolean);
-        if(sortMode==="num") return [...ordered].sort((a,b)=>(a.partNum||999)-(b.partNum||999));
-        if(sortMode==="group") {
-          const groupOrder = Object.keys(groups||{});
-          return [...ordered].sort((a,b)=>{
-            const ga=getGroupForPart(a.partNum), gb=getGroupForPart(b.partNum);
-            const ia=groupOrder.indexOf(ga), ib=groupOrder.indexOf(gb);
-            if(ia!==ib) return (ia===-1?999:ia)-(ib===-1?999:ib);
-            return (a.partNum||999)-(b.partNum||999);
-          });
-        }
+        if(sortMode==="num") return [...ordered].sort(sortByCode);
+        if(sortMode==="group") return [...ordered].sort(sortByCode);
         return ordered;
       };
 
