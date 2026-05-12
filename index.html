@@ -390,7 +390,7 @@
         try {
           const res = await callApi({ action:"ledger_append", values: buildRow(f) });
           if (res.error) throw new Error(res.error);
-          const newBike = { ...f, id: (f.condition||"U")+(f.listingNum||"")+"-"+(f.bikeModel||""), _rowIndex: bikes.length + 2 };
+          const newBike = { ...f, id: f.internalSerial||(f.condition||"U")+(f.listingNum||"")+"-"+(f.bikeModel||""), _rowIndex: bikes.length + 2 };
           setBikes(prev => [...prev, newBike]);
           setShowAdd(false); setF(blank);
           flash("✓ Bike added to ledger");
@@ -636,7 +636,7 @@
         setLoadingFolder(true);
         setSubfolders([]); setPhotos([]); setViewingFolder(null); setHasChanges(false); setSelectedPhotos(new Set()); setSourceFolderId(""); setEditingNoteId(null);
         // Load confirmed checklist parts for this bike (for modal filtering)
-        const bikeImgKey=(selectedBike.condition||"U")+(selectedBike.listingNum||"")+"-"+(selectedBike.bikeModel||"");
+        const bikeImgKey=selectedBike.internalSerial||(selectedBike.condition||"U")+(selectedBike.listingNum||"")+"-"+(selectedBike.bikeModel||"");
         callApi({action:"checklist_read", bikeSerial:bikeImgKey}).then(d=>{
           const confirmed = (d.items||[]).filter(i=>i.onBike===true||String(i.onBike).toUpperCase()==="TRUE").map(i=>String(i.partNum));
           setChecklistConfirmed(confirmed);
@@ -1786,16 +1786,16 @@
         if(!generatedSkus||generatedSkus.length===0) return;
         setSaving(true);
         try {
-          const bikeKey=(selectedBike.condition||"U")+(selectedBike.listingNum||"")+"-"+(selectedBike.bikeModel||"");
+          const bikeKey=selectedBike.internalSerial||(selectedBike.condition||"U")+(selectedBike.listingNum||"")+"-"+(selectedBike.bikeModel||"");
           const items=generatedSkus.map(item=>({bikeSerial:bikeKey,partNum:item.partNum,partName:item.partName,sku:item.sku,cogs:item.cogs,shelfLocation:item.location,driveFolderId:item.driveFolderId,notes:item.notes||""}));
           const res=await callApi({action:"sku_save_batch",items});
           if(res.success) {
             // Re-read SKUs to get real row indices
             const skuData = await callApi({action:"sku_read"});
-            const fresh = (skuData.items||[]).filter(i=>i.bikeSerial===((selectedBike.condition||'U')+(selectedBike.listingNum||'')+'-'+(selectedBike.bikeModel||'')));
+            const fresh = (skuData.items||[]).filter(i=>i.bikeSerial===(selectedBike.internalSerial||(selectedBike.condition||'U')+(selectedBike.listingNum||'')+'-'+(selectedBike.bikeModel||'')));
             setSavedSkus(fresh);
             // Mark SKU Created in checklist
-            await callApi({action:"checklist_mark_sku", bikeSerial:(selectedBike.condition||'U')+(selectedBike.listingNum||'')+'-'+(selectedBike.bikeModel||''), partNums:items.map(i=>i.partNum)}).catch(()=>{});
+            await callApi({action:"checklist_mark_sku", bikeSerial:selectedBike.internalSerial||(selectedBike.condition||'U')+(selectedBike.listingNum||'')+'-'+(selectedBike.bikeModel||''), partNums:items.map(i=>i.partNum)}).catch(()=>{});
             setGeneratedSkus(null); setPartLocations({});
             flash(`✓ ${items.length} SKUs saved (${res.updated||0} updated, ${res.added||0} new)`);
           } else flash("⚠ Save failed: "+(res.error||""));
@@ -2353,11 +2353,9 @@
       // Load existing checklist for this bike on mount
       useEffect(()=>{
         setLoading(true);
-        const bikeId = (bike.condition||"U")+(bike.listingNum||"")+"-"+(bike.bikeModel||"");
+        const bikeId = bike.internalSerial||(bike.condition||"U")+(bike.listingNum||"")+"-"+(bike.bikeModel||"");
         callApi({ action:"checklist_read", bikeSerial: bikeId })
           .then(d => {
-            // DEBUG — remove after testing
-            console.log("CHECKLIST READ bikeId:", bikeId, "items:", d.items?.length, "first item:", JSON.stringify(d.items?.[0]));
             if(d.items && d.items.length > 0) {
               const c={}, n={};
               const tempFromSheet=[];
@@ -2448,7 +2446,7 @@
             notes: notes[p.num]||"",
             location: "",
           }));
-          const bikeId = (bike.condition||"U")+(bike.listingNum||"")+"-"+(bike.bikeModel||"");
+          const bikeId = bike.internalSerial||(bike.condition||"U")+(bike.listingNum||"")+"-"+(bike.bikeModel||"");
           const res = await callApi({ action:"checklist_save", bikeSerial:bikeId, items });
           if(res.error) throw new Error(res.error);
           flash(`✓ Checklist saved — ${confirmedCount} parts confirmed for ${bike.serial}`);
@@ -2685,7 +2683,7 @@
             const purchasePrice = isOldFormat ? 0 : parseFloat(r[4])||0;
             const driveFolderId = isOldFormat ? col4 : String(r[5]||"").trim();
             const notes = isOldFormat ? String(r[5]||"").trim() : String(r[6]||"").trim();
-            return { _rowIndex:i+2, id:cond+lNum+"-"+mdl, condition:cond, listingNum:lNum, bikeModel:mdl, internalSerial:iSer, purchasePrice, driveFolderId, notes };
+            return { _rowIndex:i+2, id:iSer||(cond+lNum+"-"+mdl), condition:cond, listingNum:lNum, bikeModel:mdl, internalSerial:iSer, purchasePrice, driveFolderId, notes };
           }).filter(Boolean);
           if(loaded.length) setBikes(loaded);
         }).catch(()=>{});
