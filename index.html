@@ -1202,27 +1202,32 @@
                     <label style={lbl}>Part Name *</label>
                     <FI autoFocus value={newPartName} onChange={e=>setNewPartName(e.target.value)} placeholder="e.g. Oil Cooler" />
                   </div>
-                  {/* Part Number */}
-                  <div style={{ marginBottom:14 }}>
-                    <label style={lbl}>Part Number</label>
-                    <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                      <FI value={newPartNum} onChange={e=>setNewPartNum(e.target.value)} placeholder="Auto-assigned" style={{ flex:1 }} />
-                      <div style={{ fontSize:11, color:C.text3, whiteSpace:"nowrap" }}>Next: {getNextPartNum?getNextPartNum():116}</div>
+                  {/* Category + Part Code */}
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
+                    <div>
+                      <label style={lbl}>Category *</label>
+                      <select value={newPartCategory} onChange={e=>{
+                        setNewPartCategory(e.target.value);
+                        // Auto-assign next code for this category
+                        const allP = [...masterParts];
+                        const catP = allP.filter(p=>String(p.num).startsWith(e.target.value+"-"));
+                        const nums = catP.map(p=>{ const m=String(p.num).match(/(\d+)$/); return m?parseInt(m[1]):0; });
+                        const next = nums.length>0?Math.max(...nums)+1:1;
+                        setNewPartNum(e.target.value+"-"+String(next).padStart(2,"0"));
+                      }} style={{ ...inp }}>
+                        <option value="">— select —</option>
+                        {[["EX","Exhaust"],["EN","Engine"],["SS","Suspension"],["WL","Wheels"],["FR","Frame"],["OS","Outer Systems"]].map(([c,l])=><option key={c} value={c}>{c} — {l}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={lbl}>Part Code *</label>
+                      <FI value={newPartNum} onChange={e=>setNewPartNum(e.target.value)} placeholder="e.g. OS-65" style={{ fontFamily:C.mono }} />
                     </div>
                   </div>
                   {/* Ratio */}
                   <div style={{ marginBottom:14 }}>
-                    <label style={lbl}>Cost Ratio (e.g. 0.01 = 1%)</label>
-                    <FI type="number" step="0.001" value={newPartRatio} onChange={e=>setNewPartRatio(e.target.value)} placeholder="0.001" />
-                    <div style={{ fontSize:11, color:C.text3, marginTop:4 }}>COGS will be ~${Math.round((parseFloat(newPartRatio)||0.001) * 600)} on a $600 bike · new parts default to $1 minimum</div>
-                  </div>
-                  {/* Category */}
-                  <div style={{ marginBottom:14 }}>
-                    <label style={lbl}>Category</label>
-                    <select value={newPartCategory} onChange={e=>setNewPartCategory(e.target.value)} style={{ ...inp }}>
-                      <option value="">— select —</option>
-                      {["Engine","Brakes","Suspension","Wheels","Body","Electronics","Drivetrain"].map(c=><option key={c} value={c}>{c}</option>)}
-                    </select>
+                    <label style={lbl}>Cost Ratio (optional — e.g. 0.01 = 1%)</label>
+                    <FI type="number" step="0.001" value={newPartRatio} onChange={e=>setNewPartRatio(e.target.value)} placeholder="0 (leave blank until ratios decided)" />
                   </div>
                   {/* Notes + Location tip for permanent parts */}
                   {newPartType==="permanent"&&(
@@ -1234,7 +1239,7 @@
                   <div style={{ display:"flex", gap:10, marginTop:20 }}>
                     <button disabled={savingNewPart||!newPartName.trim()} onClick={async ()=>{
                       if(!newPartName.trim()) return;
-                      const num = parseInt(newPartNum) || (getNextPartNum ? getNextPartNum() : 116);
+                      const num = newPartNum.trim() || (newPartCategory ? newPartCategory+"-01" : "OS-65");
                       const ratio = parseFloat(newPartRatio) || 0.001;
                       const newPart = { num, name:newPartName.trim(), ratio, category:newPartCategory, isTemp:newPartType==="temporary" };
                       setSavingNewPart(true);
@@ -1660,22 +1665,19 @@
         Promise.all([
           callApi({action:"drive_folder_contents",folderId:selectedBike.driveFolderId}),
           callApi({action:"sku_read"}),
-          callApi({action:"checklist_read",bikeSerial:(selectedBike.condition||"U")+(selectedBike.listingNum||"")+"-"+(selectedBike.bikeModel||"")})
+          callApi({action:"checklist_read",bikeSerial:selectedBike.internalSerial||(selectedBike.condition||"U")+(selectedBike.listingNum||"")+"-"+(selectedBike.bikeModel||"")})
         ]).then(([driveData,skuData,checklistData])=>{
           const folders=(driveData.subfolders||[]).map(sf=>({...sf,partNum:getPartNumFromFolderName(sf.name),cleanName:getCleanName(sf.name)}));
           setDriveFolders(folders); setFolderOrder(folders.map((_,i)=>i));
           const checklist=(checklistData.items||[]);
           setChecklistItems(checklist);
-          // Pre-fill ALL locations from checklist (OWN LOC + any optional locations)
           const locs={};
           checklist.forEach(item=>{ if(item.location) locs[String(item.partNum)]=item.location; });
           setPartLocations(locs);
-          // Unassigned count: only photos not assigned to a confirmed-part folder
-          const confirmedNums=new Set(checklist.map(i=>i.partNum));
           const assignedFolderNums=new Set(folders.filter(sf=>sf.partNum).map(sf=>sf.partNum));
           const unassignedConfirmed=checklist.filter(i=>!assignedFolderNums.has(i.partNum)).length;
           setUnassignedCount(checklist.length>0 ? unassignedConfirmed : (driveData.photos||[]).length);
-          const bikeKey=(selectedBike.condition||"U")+(selectedBike.listingNum||"")+"-"+(selectedBike.bikeModel||"");
+          const bikeKey=selectedBike.internalSerial||(selectedBike.condition||"U")+(selectedBike.listingNum||"")+"-"+(selectedBike.bikeModel||"");
           setSavedSkus((skuData.items||[]).filter(i=>i.bikeSerial===bikeKey));
         }).catch(()=>flash("⚠ Could not load bike data"))
         .finally(()=>setLoadingFolders(false));
@@ -1922,10 +1924,18 @@
                     </div>
                     <div style={{ fontSize:12, color:C.accent, fontWeight:600 }}>{driveFolders.length} folder{driveFolders.length!==1?"s":""}</div>
                   </div>
+                  {/* Folder search */}
+                  <div style={{ padding:"8px 12px", borderBottom:`1px solid ${C.border}`, background:C.bg }}>
+                    <div style={{ position:"relative" }}>
+                      <span style={{ position:"absolute", left:9, top:"50%", transform:"translateY(-50%)", color:C.text3, fontSize:12 }}>{Ic.search}</span>
+                      <input value={folderSearchSKU} onChange={e=>setFolderSearchSKU(e.target.value)} placeholder="Search folders…" style={{ ...inp, paddingLeft:28, fontSize:12, padding:"5px 10px 5px 28px" }} />
+                      {folderSearchSKU&&<button onClick={()=>setFolderSearchSKU("")} style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", color:C.text3, cursor:"pointer", fontSize:13 }}>×</button>}
+                    </div>
+                  </div>
                   {loadingFolders?<Spinner />:(
                     <div style={{ maxHeight:400, overflowY:"auto" }}>
                       {driveFolders.length===0&&<div style={{ padding:32, textAlign:"center", color:C.text3, fontSize:13 }}>No part folders found in Drive. Create them in Part Images first.</div>}
-                      {orderedFolders.map((sf,i)=>{
+                      {orderedFolders.filter(sf=>!folderSearchSKU||sf.name.toLowerCase().includes(folderSearchSKU.toLowerCase())||String(sf.partNum||"").toLowerCase().includes(folderSearchSKU.toLowerCase())).map((sf,i)=>{
                         const hasNum=!!sf.partNum;
                         const isExc=sf.partNum&&isException(sf.partNum);
                         const grp=sf.partNum?getGroupForPart(sf.partNum):"";
@@ -2054,7 +2064,7 @@
                 </div>
               )}
 
-              {selectedBike&&savedSkus.length>0&&(
+              {selectedBike&&savedSkus.length>0&&!generatedSkus&&(
                 <div style={{ ...card, overflow:"hidden" }}>
                   <div style={{ padding:"12px 16px", borderBottom:`1px solid ${C.border}` }}>
                     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
@@ -2107,6 +2117,33 @@
                 </div>
               )}
 
+              {/* Always show saved SKUs panel when bike selected */}
+              {selectedBike&&savedSkus.length>0&&generatedSkus&&(
+                <div style={{ ...card, overflow:"hidden", marginTop:0 }}>
+                  <div style={{ padding:"12px 16px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                    <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Saved SKUs ({savedSkus.length})</div>
+                    <div style={{ display:"flex", gap:6 }}>
+                      <button onClick={refreshCosts} disabled={saving} style={{ ...btn, background:C.orangeL, color:C.orange, border:`1px solid ${C.orange}33`, padding:"4px 10px", fontSize:11 }}>
+                        {saving?Ic.spin:"↻"} Refresh
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ maxHeight:200, overflowY:"auto" }}>
+                    {filteredSaved.map((item,i)=>(
+                      <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"7px 16px", borderBottom:`1px solid ${C.border}`, background:i%2===0?C.white:C.bg }}>
+                        <div>
+                          <div style={{ fontFamily:C.mono, fontSize:11, fontWeight:600, color:C.text }}>{item.sku}</div>
+                          <div style={{ fontSize:10, color:C.text3 }}>{item.partName}</div>
+                        </div>
+                        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                          <span style={{ fontSize:11, fontWeight:600, color:item.cogs>0?C.accent:C.text3 }}>{item.cogs>0?`$${item.cogs}`:"—"}</span>
+                          <button onClick={()=>startEditSku(item,i)} style={{ ...btn, padding:"2px 7px", fontSize:10, background:C.bg, color:C.text2, border:`1px solid ${C.border}` }}>Edit</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {!generatedSkus&&!selectedBike&&<div style={{ ...card, padding:60, textAlign:"center" }}><div style={{ color:C.text3, marginBottom:10, opacity:0.5 }}>{Ic.tag}</div><div style={{ fontSize:14, color:C.text2 }}>Select a bike to load its part folders</div></div>}
             </div>
           </div>
