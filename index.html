@@ -9,6 +9,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body { margin: 0; padding: 0; background: #f5f5f4; font-family: 'Inter', sans-serif; }
@@ -1684,6 +1686,86 @@
         .finally(()=>setLoadingFolders(false));
       },[selectedBike]);
 
+      // ── Export SKU Labels to Word ────────────────────────────────────────────
+      const exportLabels = async () => {
+        if(!savedSkus||savedSkus.length===0) { flash("⚠ No saved SKUs to export"); return; }
+        try {
+          flash("⏳ Generating Word file…");
+          const { Document, Packer, Paragraph, TextRun, AlignmentType, ImageRun, BorderStyle } = window.docx;
+
+          // Generate barcode PNGs using JsBarcode + canvas
+          const generateBarcode = (text) => {
+            const canvas = document.createElement("canvas");
+            try {
+              JsBarcode(canvas, text, {
+                format: "CODE128",
+                width: 2,
+                height: 60,
+                displayValue: false,
+                margin: 4,
+              });
+              return canvas.toDataURL("image/png").split(",")[1]; // base64
+            } catch(e) { return null; }
+          };
+
+          const border = { style: BorderStyle.SINGLE, size: 4, color: "CCCCCC" };
+          const children = [];
+
+          savedSkus.forEach((item, idx) => {
+            const barcodeB64 = generateBarcode(item.sku);
+            // Barcode image
+            if(barcodeB64) {
+              children.push(new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: idx===0?0:240, after: 0 },
+                children: [new ImageRun({
+                  data: Uint8Array.from(atob(barcodeB64), c=>c.charCodeAt(0)),
+                  transformation: { width: 280, height: 70 },
+                  type: "png",
+                })]
+              }));
+            }
+            // SKU text
+            children.push(new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 0, after: 0 },
+              children: [new TextRun({ text: item.sku, font: "Arial", size: 21, bold: true })]
+            }));
+            // Part name
+            children.push(new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 0, after: idx<savedSkus.length-1?160:0 },
+              border: idx<savedSkus.length-1?{ bottom: { style: BorderStyle.SINGLE, size: 2, color: "DDDDDD", space: 4 } }:undefined,
+              children: [new TextRun({ text: item.partName||"", font: "Arial", size: 21 })]
+            }));
+          });
+
+          const doc = new Document({
+            sections: [{
+              properties: {
+                page: {
+                  size: { width: 12240, height: 15840 },
+                  margin: { top: 1080, right: 2160, bottom: 1080, left: 2160 }
+                }
+              },
+              children
+            }]
+          });
+
+          const buffer = await Packer.toBuffer(doc);
+          const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          const bikeName = selectedBike ? `${selectedBike.condition||"U"}${selectedBike.listingNum||""}-${selectedBike.bikeModel||""}` : "brekke";
+          a.href = url; a.download = `SKU-Labels-${bikeName}.docx`; a.click();
+          URL.revokeObjectURL(url);
+          flash("✓ Labels exported as Word file");
+        } catch(e) {
+          flash("⚠ Export failed: "+e.message);
+          console.error("Export error:", e);
+        }
+      };
+
       // OWN LOC / Exception parts removed for Brekke
       const isException = (n) => false;
       const allExceptionsHaveLocation = true;
@@ -2070,9 +2152,14 @@
                   <div style={{ padding:"12px 16px", borderBottom:`1px solid ${C.border}` }}>
                     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
                       <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Saved SKUs — {selectedBike.condition}{selectedBike.listingNum} {selectedBike.bikeModel}</div>
-                      <button onClick={refreshCosts} disabled={saving} style={{ ...btn, background:C.orangeL, color:C.orange, border:`1px solid ${C.orange}33`, padding:"4px 10px", fontSize:11 }}>
-                        {saving?Ic.spin:"↻"} Refresh Costs
-                      </button>
+                      <div style={{ display:"flex", gap:6 }}>
+                        <button onClick={exportLabels} style={{ ...btn, background:"#1F3864", color:"#fff", padding:"4px 12px", fontSize:11 }}>
+                          ⬇ Export Labels (.docx)
+                        </button>
+                        <button onClick={refreshCosts} disabled={saving} style={{ ...btn, background:C.orangeL, color:C.orange, border:`1px solid ${C.orange}33`, padding:"4px 10px", fontSize:11 }}>
+                          {saving?Ic.spin:"↻"} Refresh
+                        </button>
+                      </div>
                     </div>
                     <div style={{ position:"relative" }}>
                       <span style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", color:C.text3 }}>{Ic.search}</span>
@@ -2124,6 +2211,7 @@
                   <div style={{ padding:"12px 16px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                     <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Saved SKUs ({savedSkus.length})</div>
                     <div style={{ display:"flex", gap:6 }}>
+                      <button onClick={exportLabels} style={{ ...btn, background:"#1F3864", color:"#fff", padding:"4px 10px", fontSize:11 }}>⬇ Export</button>
                       <button onClick={refreshCosts} disabled={saving} style={{ ...btn, background:C.orangeL, color:C.orange, border:`1px solid ${C.orange}33`, padding:"4px 10px", fontSize:11 }}>
                         {saving?Ic.spin:"↻"} Refresh
                       </button>
